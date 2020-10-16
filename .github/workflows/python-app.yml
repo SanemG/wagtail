@@ -1,17 +1,48 @@
+#
+#name: Integration Test
+#on: [push]
+#jobs:
+#  build:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@master
+#      - name: Self test
+#        id: selftest
+#
+#        uses: ryan-rozario/pipreqs-action-cpy@master
+#
+#        # Put an example of mandatory inputs here
+#        with:
+#          PROJECT_PATH: wagtail   #default is the root of the repository
+#          REQUIREMENT_PATH: wagtail/requirement.txt  #default is requirement.txt in the root of your repository
+name: Apply Black Gradually
 
-name: Integration Test
-on: [push]
+on:
+  pull_request:
+    types: [closed]
+
 jobs:
-  build:
+  apply-black:
+    if: github.head_ref == 'sanem'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@master
-      - name: Self test
-        id: selftest
-
-        uses: ryan-rozario/pipreqs-action-cpy@master
-
-        # Put an example of mandatory inputs here
+      - uses: actions/checkout@v2
         with:
-          PROJECT_PATH: wagtail   #default is the root of the repository
-          REQUIREMENT_PATH: wagtail/requirement.txt  #default is requirement.txt in the root of your repository
+          ref: master
+          fetch-depth: 0
+      - name: Apply Black Gradually
+        id: black
+        uses: rocioar/gradual-black-formatter@v1
+        with:
+          number_of_files: 3
+          ignore_files_regex: *test*,*migrations*
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: Apply black to ${{ steps.black.outputs.number_of_modified_files }} files
+          committer: GitHub <noreply@github.com>
+          author: ${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>
+          title: Apply black to ${{ steps.black.outputs.number_of_modified_files }} files
+          body: "Auto-generated PR that applies black to: ${{ steps.black.outputs.modified_file_names }}."
+          branch: sanem
