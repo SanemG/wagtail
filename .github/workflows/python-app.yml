@@ -58,60 +58,102 @@ on:
     branches: [ master,develop ]
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
+#jobs:
+#  check_version_number:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Checkout
+#        uses: actions/checkout@v2
+#      - name: Get semantic release version
+#        uses: cycjimmy/semantic-release-action@v2
+#        id: semantic_dry
+#        with:
+#          branch: master
+#          dry_run: true
+#          # You can specify specifying version range for the extra plugins if you prefer.
+#          extra_plugins: |
+#            @semantic-release/changelog
+#            @semantic-release/git
+#            @semantic-release/github
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#    outputs:
+#      new_release_published: ${{ steps.semantic_dry.outputs.new_release_published }}
+#      new_release_version: ${{ steps.semantic_dry.outputs.new_release_version }}
+#
+#  build_package_push:
+#    needs: check_version_number
+#    if: needs.check_version_number.outputs.new_release_published == 'true'
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Checkout
+#        uses: actions/checkout@v2
+#        with:
+#          submodules: 'recursive'
+#      # - name: Cake action
+#      #   uses: cake-build/cake-action@v1.2.0
+#      #   env:
+#      #     NEW_RELEASE_VERSION: ${{ needs.check_version_number.outputs.new_release_version }}
+#      #   with:
+#      #     script-path: ./build.cake
+#
+#  tag_version:
+#    needs: [build_package_push,check_version_number]
+#    if: needs.check_version_number.outputs.new_release_published == 'true'
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Checkout
+#        uses: actions/checkout@v2
+#      - name: Get semantic release version
+#        uses: cycjimmy/semantic-release-action@v2
+#        id: semantic
+#        with:
+#          branch: master
+#          extra_plugins: |
+#            @semantic-release/changelog
+#            @semantic-release/git
+#            @semantic-release/github
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 jobs:
-  check_version_number:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Get semantic release version
-        uses: cycjimmy/semantic-release-action@v2
-        id: semantic_dry
-        with:
-          branch: master
-          dry_run: true
-          # You can specify specifying version range for the extra plugins if you prefer.
-          extra_plugins: |
-            @semantic-release/changelog
-            @semantic-release/git
-            @semantic-release/github
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    outputs:
-      new_release_published: ${{ steps.semantic_dry.outputs.new_release_published }}
-      new_release_version: ${{ steps.semantic_dry.outputs.new_release_version }}
 
-  build_package_push:
-    needs: check_version_number
-    if: needs.check_version_number.outputs.new_release_published == 'true'
+  test:
+    name: Test
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-        with:
-          submodules: 'recursive'
-      # - name: Cake action
-      #   uses: cake-build/cake-action@v1.2.0
-      #   env:
-      #     NEW_RELEASE_VERSION: ${{ needs.check_version_number.outputs.new_release_version }}
-      #   with:
-      #     script-path: ./build.cake
 
-  tag_version:
-    needs: [build_package_push,check_version_number]
-    if: needs.check_version_number.outputs.new_release_published == 'true'
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - 3.8
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Get semantic release version
-        uses: cycjimmy/semantic-release-action@v2
-        id: semantic
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
         with:
-          branch: master
-          extra_plugins: |
-            @semantic-release/changelog
-            @semantic-release/git
-            @semantic-release/github
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          python-version: ${{ matrix.python-version }}
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install '.[tests]'
+      - name: Run test suite
+        run: |
+          pytest tests --cov po4
+
+  release:
+    name: Release to PyPI
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    needs: [test]
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          # Make sure the whole repository history is present, so that
+          # python-semantic-release can decide if a new release is needed.
+          fetch-depth: 0
+
+      - uses: relekang/python-semantic-release@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          pypi_token: ${{ secrets.PYPI_TOKEN }}
