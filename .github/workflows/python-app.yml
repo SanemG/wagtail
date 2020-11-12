@@ -1,4 +1,4 @@
-#
+name: python ci
 #name: Integration Test
 #on: [push]
 #jobs:
@@ -15,34 +15,103 @@
 #        with:
 #          PROJECT_PATH: wagtail   #default is the root of the repository
 #          REQUIREMENT_PATH: wagtail/requirement.txt  #default is requirement.txt in the root of your repository
-name: Apply Black Gradually
+#name: Apply Black Gradually
+#
+#on:
+#  pull_request:
+#    types: [closed]
+#
+#jobs:
+#  apply-black:
+#    if: github.head_ref == 'black'
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v2
+#        with:
+#          ref: master
+#          fetch-depth: 0
+#      - name: Apply Black Gradually
+#        id: black
+#        uses: rocioar/gradual-black-formatter@v1
+#        with:
+#          number_of_files: 3
+##          ignore_files_regex: *test*migrations*
+#      - name: Create Pull Request
+#        uses: peter-evans/create-pull-request@v2
+#        with:
+#          token: ${{ secrets.GITHUB_TOKEN }}
+#          commit-message: Apply black to ${{ steps.black.outputs.number_of_modified_files }} files
+#          committer: GitHub <noreply@github.com>
+#          author: ${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>
+#          title: Apply black to ${{ steps.black.outputs.number_of_modified_files }} files
+#          body: "Auto-generated PR that applies black to: ${{ steps.black.outputs.modified_file_names }}."
+#          branch: black
+# This is a basic workflow to help you get started with Actions
 
+
+# Controls when the action will run. Triggers the workflow on push or pull request
+# events but only for the main branch
 on:
+  push:
+    branches: [ master ]
   pull_request:
-    types: [closed]
+    branches: [ master,develop ]
 
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  apply-black:
-    if: github.head_ref == 'black'
+  check_version_number:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Get semantic release version
+        uses: cycjimmy/semantic-release-action@v2
+        id: semantic_dry
         with:
-          ref: master
-          fetch-depth: 0
-      - name: Apply Black Gradually
-        id: black
-        uses: rocioar/gradual-black-formatter@v1
+          branch: master
+          dry_run: true
+          # You can specify specifying version range for the extra plugins if you prefer.
+          extra_plugins: |
+            @semantic-release/changelog
+            @semantic-release/git
+            @semantic-release/github
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    outputs:
+      new_release_published: ${{ steps.semantic_dry.outputs.new_release_published }}
+      new_release_version: ${{ steps.semantic_dry.outputs.new_release_version }}
+
+  build_package_push:
+    needs: check_version_number
+    if: needs.check_version_number.outputs.new_release_published == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
         with:
-          number_of_files: 3
-#          ignore_files_regex: *test*migrations*
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v2
+          submodules: 'recursive'
+      # - name: Cake action
+      #   uses: cake-build/cake-action@v1.2.0
+      #   env:
+      #     NEW_RELEASE_VERSION: ${{ needs.check_version_number.outputs.new_release_version }}
+      #   with:
+      #     script-path: ./build.cake
+
+  tag_version:
+    needs: [build_package_push,check_version_number]
+    if: needs.check_version_number.outputs.new_release_published == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Get semantic release version
+        uses: cycjimmy/semantic-release-action@v2
+        id: semantic
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: Apply black to ${{ steps.black.outputs.number_of_modified_files }} files
-          committer: GitHub <noreply@github.com>
-          author: ${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>
-          title: Apply black to ${{ steps.black.outputs.number_of_modified_files }} files
-          body: "Auto-generated PR that applies black to: ${{ steps.black.outputs.modified_file_names }}."
-          branch: black
+          branch: master
+          extra_plugins: |
+            @semantic-release/changelog
+            @semantic-release/git
+            @semantic-release/github
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
