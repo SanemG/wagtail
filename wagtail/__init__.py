@@ -8,7 +8,8 @@ from wagtail.utils.version import get_semver_version, get_version
 # release must be one of alpha, beta, rc, or final
 VERSION = (2, 11, 0, 'alpha', 0)
 
-__version__ = get_version(VERSION)
+#__version__ = get_version(VERSION)
+__version__ = '2.11.0'
 
 # Required for npm package for frontend
 __semver__ = get_semver_version(VERSION)
